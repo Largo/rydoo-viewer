@@ -52,6 +52,12 @@
           padding:10px 14px;border-radius:10px;font-size:12.5px;margin-bottom:16px}
   .expense{background:var(--panel);border:1px solid var(--line);border-radius:12px;
            padding:14px 16px;margin-bottom:12px}
+  .expense.rejected{border-color:#6b2a2a;box-shadow:inset 4px 0 0 var(--danger)}
+  .reject{background:#3a1414;border:1px solid #6b2a2a;color:#ffb3b3;
+          padding:8px 12px;border-radius:8px;font-size:12.5px;margin:0 0 12px}
+  .reject b{color:#ff8f8f}
+  .reject ul{margin:4px 0 0;padding-left:18px}
+  .pill.rejpill{background:#4a1c1c;color:#ff9e9e}
   .expense .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
                 align-items:baseline}
   .refId{font-weight:700;font-size:15px}
@@ -488,6 +494,27 @@
 
   function refIdOf(e) { return pick(e, "refId", "xpdReference", "reference", "expenseId", "id"); }
 
+  // Sortable timestamp for an expense (newest-first ordering). Falls back through
+  // the same date fields the card displays; unparseable dates sort last.
+  function dateValue(e) {
+    var d = pick(e, "expenseDate", "date", "createdAt", "exportedAt");
+    var t = d ? Date.parse(d) : NaN;
+    return isNaN(t) ? -Infinity : t;
+  }
+
+  function rejectsOf(e) { return Array.isArray(e.rejectReasons) ? e.rejectReasons : []; }
+
+  // The user can arrive as a nested object ({firstName,lastName,email}) or a plain
+  // string depending on the field. Resolve it to a displayable name.
+  function userOf(e) {
+    var u = pick(e, "userName", "user", "employee", "owner");
+    if (u && typeof u === "object") {
+      var name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
+      return name || u.email || u.name || "";
+    }
+    return u;
+  }
+
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
@@ -500,6 +527,8 @@
       if (!q) return true;
       return String(refIdOf(e)).toLowerCase().indexOf(q) !== -1;
     });
+    // Newest first. Copy before sorting so `expenses` keeps its fetch order.
+    list = list.slice().sort(function (a, b) { return dateValue(b) - dateValue(a); });
     view = list;   // click handler must index into the rendered list, not `expenses`
 
     $("count").classList.remove("hide");
@@ -513,11 +542,13 @@
       var currency = pick(e, "currency", "currencyCode");
       var date = pick(e, "expenseDate", "date", "createdAt", "exportedAt");
       var merchant = pick(e, "merchant", "supplier", "description", "category");
-      var user = pick(e, "userName", "user", "employee", "owner");
+      var user = userOf(e);
       var status = pick(e, "status", "expenseStatus");
 
+      var rejects = rejectsOf(e);
+
       var card = document.createElement("div");
-      card.className = "expense";
+      card.className = "expense" + (rejects.length ? " rejected" : "");
 
       var atts = Array.isArray(e.attachments) ? e.attachments : [];
       var imgUrl = e.image && e.image.url ? e.image.url : "";
@@ -540,9 +571,17 @@
           (merchant ? '<span>🏷 <b>' + esc(merchant) + '</b></span>' : "") +
           (user ? '<span>👤 <b>' + esc(user) + '</b></span>' : "") +
           (status ? '<span class="pill">' + esc(status) + '</span>' : "") +
+          (rejects.length ? '<span class="pill rejpill">⚠ rejected</span>' : "") +
           (imgUrl || (e.image && e.image.base64String) ? '' : '<span class="pill">no image</span>') +
           '<span class="pill">' + atts.length + ' attachment' + (atts.length === 1 ? "" : "s") + '</span>' +
         '</div>' +
+        (rejects.length
+          ? '<div class="reject">⚠ <b>Reject reason' + (rejects.length === 1 ? "" : "s") + ':</b><ul>' +
+            rejects.map(function (r) {
+              var t = pick(r, "title", "reason", "comment", "type") || "(unspecified)";
+              return '<li>' + esc(t) + '</li>';
+            }).join("") + '</ul></div>'
+          : "") +
         '<div class="actions">' + rows + '</div>' +
         '<div class="cardmsg" data-msg></div>' +
         '<div class="preview" data-preview></div>' +
