@@ -160,6 +160,7 @@
   // ── State ────────────────────────────────────────────────────
   var token = null;
   var expenses = [];           // full fetched list
+  var view = [];               // list currently rendered (may be search-filtered)
   var $ = function (id) { return document.getElementById(id); };
 
   var PROD_API = "https://api.rydoo.com";
@@ -499,6 +500,7 @@
       if (!q) return true;
       return String(refIdOf(e)).toLowerCase().indexOf(q) !== -1;
     });
+    view = list;   // click handler must index into the rendered list, not `expenses`
 
     $("count").classList.remove("hide");
     $("count").textContent = list.length + " shown" + (q ? " (filtered)" : "") + " of " + expenses.length + " loaded";
@@ -565,7 +567,7 @@
     }
     var btn = ev.target.closest("button[data-idx]");
     if (!btn) return;
-    var e = expenses[parseInt(btn.getAttribute("data-idx"), 10)];
+    var e = view[parseInt(btn.getAttribute("data-idx"), 10)];
     if (!e) return;
     var card = btn.closest(".expense");
     var msgEl = card ? card.querySelector("[data-msg]") : null;
